@@ -222,9 +222,9 @@ class ResNet(nn.Module):
         return [out1, out2, out3, out], [outfeat4, outfeat3, outfeat2, outfeat1]
 
     def forward_weights(self, x, weights):
-        out = F.conv2d(x, weights['conv1.weight'], stride=1, padding=1)
+        out = F.conv2d(x, weights['module.conv1.weight'], stride=1, padding=1)
         out = F.batch_norm(out, torch.zeros(out.data.size(1)).cuda(), torch.ones(out.data.size(1)).cuda(),
-                           weights['bn1.weight'], weights['bn1.bias'],
+                           weights['module.bn1.weight'], weights['module.bn1.bias'],
                            training=True)
         out = F.relu(out, inplace=True)
 
@@ -232,29 +232,29 @@ class ResNet(nn.Module):
             for block_num in range(self.num_blocks[stage_num-1]):
                 if block_num == 0 and stage_num != 1:
                     out = BasicBlock_functional_forward(out, 
-                        weights=[weights['layer{:d}.0.conv1.weight'.format(stage_num)], 
-                        weights['layer{:d}.0.bn1.weight'.format(stage_num)],
-                        weights['layer{:d}.0.bn1.bias'.format(stage_num)],
-                        weights['layer{:d}.0.conv2.weight'.format(stage_num)], 
-                        weights['layer{:d}.0.bn2.weight'.format(stage_num)],
-                        weights['layer{:d}.0.bn2.bias'.format(stage_num)],
-                        weights['layer{:d}.0.shortcut.0.weight'.format(stage_num)], 
-                        weights['layer{:d}.0.shortcut.1.weight'.format(stage_num)],
-                        weights['layer{:d}.0.shortcut.1.bias'.format(stage_num)]], stride=2
+                        weights=[weights['module.layer{:d}.0.conv1.weight'.format(stage_num)], 
+                        weights['module.layer{:d}.0.bn1.weight'.format(stage_num)],
+                        weights['module.layer{:d}.0.bn1.bias'.format(stage_num)],
+                        weights['module.layer{:d}.0.conv2.weight'.format(stage_num)], 
+                        weights['module.layer{:d}.0.bn2.weight'.format(stage_num)],
+                        weights['module.layer{:d}.0.bn2.bias'.format(stage_num)],
+                        weights['module.layer{:d}.0.shortcut.0.weight'.format(stage_num)], 
+                        weights['module.layer{:d}.0.shortcut.1.weight'.format(stage_num)],
+                        weights['module.layer{:d}.0.shortcut.1.bias'.format(stage_num)]], stride=2
                         )
                 else:
                     out = BasicBlock_functional_forward(out,
-                        weights=[weights['layer{:d}.{:d}.conv1.weight'.format(stage_num, block_num)], 
-                        weights['layer{:d}.{:d}.bn1.weight'.format(stage_num, block_num)],
-                        weights['layer{:d}.{:d}.bn1.bias'.format(stage_num, block_num)],
-                        weights['layer{:d}.{:d}.conv2.weight'.format(stage_num, block_num)], 
-                        weights['layer{:d}.{:d}.bn2.weight'.format(stage_num, block_num)],
-                        weights['layer{:d}.{:d}.bn2.bias'.format(stage_num, block_num)]], stride=1
+                        weights=[weights['module.layer{:d}.{:d}.conv1.weight'.format(stage_num, block_num)], 
+                        weights['module.layer{:d}.{:d}.bn1.weight'.format(stage_num, block_num)],
+                        weights['module.layer{:d}.{:d}.bn1.bias'.format(stage_num, block_num)],
+                        weights['module.layer{:d}.{:d}.conv2.weight'.format(stage_num, block_num)], 
+                        weights['module.layer{:d}.{:d}.bn2.weight'.format(stage_num, block_num)],
+                        weights['module.layer{:d}.{:d}.bn2.bias'.format(stage_num, block_num)]], stride=1
                         )
 
         out = F.avg_pool2d(out, 4)
         out = out.view(out.size(0), -1)
-        out = F.linear(out, weights['linear.weight'], weights['linear.bias'])
+        out = F.linear(out, weights['module.linear.weight'], weights['module.linear.bias'])
 
         return out
 
