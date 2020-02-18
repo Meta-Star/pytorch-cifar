@@ -113,7 +113,6 @@ def train(epoch):
 
     for batch_idx, (inputs, targets) in enumerate(trainloader):
         inputs, targets = inputs.to(device), targets.to(device)
-        optimizer.zero_grad()
         outputs, outfeat = net(inputs)
         #outputs, feat_loss = net(inputs, baseline=True)
 
@@ -155,6 +154,7 @@ def train(epoch):
         #loss += feat_loss * 5e-7
 
         loss.backward()
+        optimizer.zero_grad()
         optimizer.step()
 
         train_loss += loss.item()
@@ -168,7 +168,6 @@ def train(epoch):
     #meta_update
     for batch_idx, (inputs, targets) in enumerate(trainloader):
         inputs, targets = inputs.to(device), targets.to(device)
-        optimizer.zero_grad()
         outputs, outfeat = net(inputs)
         
         outfeat4 = outfeat[0].detach()
@@ -181,14 +180,26 @@ def train(epoch):
             teacher_label = label[index].detach()
             teacher_labels.append(teacher_label)       
 
-        loss = criterion(outputs[-1], targets)
+        loss1 = criterion(outputs[-1], targets)
+        loss2 = torch.tensor(0.0).to(device)
+        loss3 = torch.tensor(0.0).to(device)
         for index in range(0, len(outputs)-1):
-            loss += criterion(outputs[index], targets) * (1 - args.lambda_KD)
-            loss += CrossEntropy(outputs[index], teacher_labels[index]) * args.lambda_KD
+            loss2 += criterion(outputs[index], targets) * (1 - args.lambda_KD)
+            loss3 += CrossEntropy(outputs[index], teacher_labels[index]) * args.lambda_KD
 
         fast_weights = OrderedDict((name, param) for (name, param) in net.named_parameters())
-        grads = torch.autograd.grad(train_loss, net.parameters(), create_graph=True)
-        fast_weights = OrderedDict((name, param - vgg_lr * grad) for ((name, param), grad, data) in zip(fast_weights.items(), grads, data))
+        grads1 = torch.autograd.grad(loss1, net.parameters())
+        grads2 = torch.autograd.grad(loss2, net.parameters())
+        grads3 = torch.autograd.grad(loss3, net.parameters(), create_graph=True)
+        fast_weights = OrderedDict((name, param - res_lr * (grad1+grad2+grad3)) for ((name, param), grad1, grad2, grad3) in zip(fast_weights.items(), grads1, grads2, grads3))
+        outputs, _ = net.forward(inputs, fast_weights)
+        loss = criterion(outputs[-1], targets)
+        loss.backward()
+
+        meta_optimizer.zero_grad()
+        meta_optimizer.step()
+
+
 
 def test(epoch):
     global best_acc
