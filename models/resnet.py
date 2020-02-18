@@ -36,6 +36,31 @@ class BasicBlock(nn.Module):
         return out
 
 
+def BasicBlock_functional_forward(x, weights, stride):
+        
+    out = F.conv2d(x, weights[0], stride=stride, padding=1)
+    out = F.batch_norm(out, torch.zeros(out.data.size(1)).cuda(), torch.ones(out.data.size(1)).cuda(),
+                               weight=weights[1], bias=weights[2],
+                               training=True)
+    out = F.relu(out, inplace=True)
+
+    out = F.conv2d(out, weights[3], stride=1, padding=1)
+    out = F.batch_norm(out, torch.zeros(out.data.size(1)).cuda(), torch.ones(out.data.size(1)).cuda(),
+                               weight=weights[4], bias=weights[5],
+                               training=True)
+    if len(weights) == 9:
+        shortcut_out = F.conv2d(x, weights[6], stride=stride)
+        shortcut_out = F.batch_norm(shortcut_out, torch.zeros(shortcut_out.data.size(1)).cuda(), torch.ones(shortcut_out.data.size(1)).cuda(),
+                                        weights[7], weights[8],
+                                        training=True)
+        out += shortcut_out
+
+    else:
+        out += x
+    out = F.relu(out, inplace=True)
+    return out
+
+
 class Bottleneck(nn.Module):
     expansion = 4
 
@@ -63,6 +88,39 @@ class Bottleneck(nn.Module):
         out = F.relu(out)
         return out
 
+
+def Bottleneck_functional_forward(x, weights, stride):
+
+    out = F.conv2d(x, weights[0])
+    out = F.batch_norm(out, torch.zeros(out.data.size(1)).cuda(), torch.ones(out.data.size(1)).cuda(),
+                               weight=weights[1], bias=weights[2],
+                               training=True)
+    out = F.relu(out, inplace=True)
+        
+    out = F.conv2d(x, weights[3], stride=stride, padding=1)
+    out = F.batch_norm(out, torch.zeros(out.data.size(1)).cuda(), torch.ones(out.data.size(1)).cuda(),
+                               weight=weights[4], bias=weights[5],
+                               training=True)
+    out = F.relu(out, inplace=True)
+
+    out = F.conv2d(out, weights[6])
+    out = F.batch_norm(out, torch.zeros(out.data.size(1)).cuda(), torch.ones(out.data.size(1)).cuda(),
+                               weight=weights[7], bias=weights[8],
+                               training=True)
+
+    if len(weights) == 12:
+        shortcut_out = F.conv2d(x, weights[9], stride=stride)
+        shortcut_out = F.batch_norm(shortcut_out, torch.zeros(shortcut_out.data.size(1)).cuda(), torch.ones(shortcut_out.data.size(1)).cuda(),
+                                        weights[10], weights[11],
+                                        training=True)
+        out += shortcut_out
+
+    else:
+        out += x
+    out = F.relu(out, inplace=True)
+    return out
+
+
 def ScalaNet(channel_in, channel_out, size):
     return nn.Sequential(
         nn.Conv2d(channel_in, 128, kernel_size=1, stride=1),
@@ -77,10 +135,36 @@ def ScalaNet(channel_in, channel_out, size):
         nn.AvgPool2d(4, 4)
         )
 
+
+def ScalaNet_functional_forward(x, weights, stride):
+
+    out = F.conv2d(x, weights[0], bias=weights[1], stride=1)
+    out = F.batch_norm(out, torch.zeros(out.data.size(1)).cuda(), torch.ones(out.data.size(1)).cuda(),
+                               weight=weights[2], bias=weights[3],
+                               training=True)
+    out = F.relu(out, inplace=True)
+        
+    out = F.conv2d(out, weights[4], bias=weights[5], stride=stride)
+    out = F.batch_norm(out, torch.zeros(out.data.size(1)).cuda(), torch.ones(out.data.size(1)).cuda(),
+                               weight=weights[6], bias=weights[7],
+                               training=True)
+    out = F.relu(out, inplace=True)
+
+    out = F.conv2d(out, weights[8], bias=weights[9], stride=1)
+    out = F.batch_norm(out, torch.zeros(out.data.size(1)).cuda(), torch.ones(out.data.size(1)).cuda(),
+                               weight=weights[10], bias=weights[11],
+                               training=True)
+    out = F.relu(out, inplace=True)
+    out = F.avg_pool2d(out, kernel_size=4, stride=4)
+
+
+    return out
+
 class ResNet(nn.Module):
     def __init__(self, block, num_blocks, num_classes=100):
         super(ResNet, self).__init__()
         self.in_planes = 64
+        self.num_blocks = num_blocks
 
         self.conv1 = nn.Conv2d(3, 64, kernel_size=3, stride=1, padding=1, bias=False)
         self.bn1 = nn.BatchNorm2d(64)
@@ -107,12 +191,15 @@ class ResNet(nn.Module):
             self.in_planes = planes * block.expansion
         return nn.Sequential(*layers)
 
-    def forward(self, x, train=True, baseline=False):
+    def forward(self, x, weights=None, train=True, baseline=False):
 
         if not train:
             return self.predict(x)
+
         if baseline:
-            self.forward_bs(x, train=train)
+            return self.forward_bs(x, train=train)
+        if weights:
+            return self.forward_weights(x, weights)
 
         out = F.relu(self.bn1(self.conv1(x)))
 
@@ -133,6 +220,43 @@ class ResNet(nn.Module):
         out = self.linear(out)
 
         return [out1, out2, out3, out], [outfeat4, outfeat3, outfeat2, outfeat1]
+
+    def forward_weights(self, x, weights):
+        out = F.conv2d(x, weights['conv1.weight'], stride=1, padding=1)
+        out = F.batch_norm(out, torch.zeros(out.data.size(1)).cuda(), torch.ones(out.data.size(1)).cuda(),
+                           weights['bn1.weight'], weights['bn1.bias'],
+                           training=True)
+        out = F.relu(out, inplace=True)
+
+        for stage_num in range(1, len(self.num_blocks)+1):
+            for block_num in range(self.num_blocks[stage_num-1]):
+                if block_num == 0 and stage_num != 1:
+                    out = BasicBlock_functional_forward(out, 
+                        weights=[weights['layer{:d}.0.conv1.weight'.format(stage_num)], 
+                        weights['layer{:d}.0.bn1.weight'.format(stage_num)],
+                        weights['layer{:d}.0.bn1.bias'.format(stage_num)],
+                        weights['layer{:d}.0.conv2.weight'.format(stage_num)], 
+                        weights['layer{:d}.0.bn2.weight'.format(stage_num)],
+                        weights['layer{:d}.0.bn2.bias'.format(stage_num)],
+                        weights['layer{:d}.0.shortcut.0.weight'.format(stage_num)], 
+                        weights['layer{:d}.0.shortcut.1.weight'.format(stage_num)],
+                        weights['layer{:d}.0.shortcut.1.bias'.format(stage_num)]], stride=2
+                        )
+                else:
+                    out = BasicBlock_functional_forward(out,
+                        weights=[weights['layer{:d}.{:d}.conv1.weight'.format(stage_num, block_num)], 
+                        weights['layer{:d}.{:d}.bn1.weight'.format(stage_num, block_num)],
+                        weights['layer{:d}.{:d}.bn1.bias'.format(stage_num, block_num)],
+                        weights['layer{:d}.{:d}.conv2.weight'.format(stage_num, block_num)], 
+                        weights['layer{:d}.{:d}.bn2.weight'.format(stage_num, block_num)],
+                        weights['layer{:d}.{:d}.bn2.bias'.format(stage_num, block_num)]], stride=1
+                        )
+
+        out = F.avg_pool2d(out, 4)
+        out = out.view(out.size(0), -1)
+        out = F.linear(out, weights['linear.weight'], weights['linear.bias'])
+
+        return out
 
     def forward_bs(self, x, train=True):
 
@@ -180,6 +304,7 @@ class ResNet(nn.Module):
 
 
         out = self.layer4(out)
+
         out = F.avg_pool2d(out, 4).view(out.size(0), -1)
         out = self.linear(out)
 
