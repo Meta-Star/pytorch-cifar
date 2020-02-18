@@ -20,8 +20,8 @@ from utils import progress_bar
 
 
 def CrossEntropy(outputs, targets):
-    log_softmax_outputs = F.log_softmax(outputs/3.0, dim=1)
-    softmax_targets = F.softmax(targets/3.0, dim=1)
+    log_softmax_outputs = F.log_softmax(outputs/1.0, dim=1)
+    softmax_targets = F.softmax(targets/1.0, dim=1)
     return -(log_softmax_outputs * softmax_targets).sum(dim=1).mean()
 
 
@@ -151,7 +151,7 @@ def train(epoch):
         """
         for index in range(0, len(outputs)-1):
             loss += criterion(outputs[index], targets) * (1 - args.lambda_KD)
-            loss += CrossEntropy(outputs[index], teacher_labels[index]) * args.lambda_KD * 9.0
+            loss += CrossEntropy(outputs[index], teacher_labels[index]) * args.lambda_KD * 1.0
             #loss += CrossEntropy(outputs[index], teacher_label) * args.lambda_KD * 9.0
 
         #loss += feat_loss * 5e-7
@@ -167,54 +167,55 @@ def train(epoch):
         progress_bar(batch_idx, len(trainloader), 'Loss: %.3f | Acc: %.3f%% (%d/%d) | lr: %.3f'
             % (train_loss/(batch_idx+1), 100.*correct/total, correct, total, lr))
 
-    """
+    
     #meta_update
-    train_loss = 0
-    correct = 0
-    total = 0
-    for batch_idx, (inputs, targets) in enumerate(trainloader):
-        inputs, targets = inputs.to(device), targets.to(device)
-        outputs, outfeat = net(inputs)
-        meta_optimizer.zero_grad()
-        
-        outfeat4 = outfeat[0].detach()
-        outfeat3 = outfeat[1].detach()
-        outfeat2 = outfeat[2].detach()
-        outfeat1 = outfeat[3].detach()
-        label = labelGenerator(outfeat4, outfeat3, outfeat2, outfeat1)
-        teacher_labels = []
-        for index in range(len(label)):
-            teacher_label = label[index].detach()
-            teacher_labels.append(teacher_label)       
+    if epoch%5 == 0:
+        train_loss = 0
+        correct = 0
+        total = 0
+        for batch_idx, (inputs, targets) in enumerate(trainloader):
+            inputs, targets = inputs.to(device), targets.to(device)
+            outputs, outfeat = net(inputs)
+            meta_optimizer.zero_grad()
+            
+            outfeat4 = outfeat[0].detach()
+            outfeat3 = outfeat[1].detach()
+            outfeat2 = outfeat[2].detach()
+            outfeat1 = outfeat[3].detach()
+            label = labelGenerator(outfeat4, outfeat3, outfeat2, outfeat1)
+            teacher_labels = []
+            for index in range(len(label)):
+                teacher_label = label[index].detach()
+                teacher_labels.append(teacher_label)       
 
-        loss1 = criterion(outputs[-1], targets)
-        loss2 = torch.tensor(0.0).to(device)
-        loss3 = torch.tensor(0.0).to(device)
-        for index in range(0, len(outputs)-1):
-            loss2 += criterion(outputs[index], targets) * (1 - args.lambda_KD)
-            loss3 += CrossEntropy(outputs[index], teacher_labels[index]) * args.lambda_KD
+            loss1 = criterion(outputs[-1], targets)
+            loss2 = torch.tensor(0.0).to(device)
+            loss3 = torch.tensor(0.0).to(device)
+            for index in range(0, len(outputs)-1):
+                loss2 += criterion(outputs[index], targets) * (1 - args.lambda_KD)
+                loss3 += CrossEntropy(outputs[index], teacher_labels[index]) * args.lambda_KD
 
-        fast_weights = OrderedDict((name, param) for (name, param) in net.named_parameters())
+            fast_weights = OrderedDict((name, param) for (name, param) in net.named_parameters())
 
-        grads1 = torch.autograd.grad(loss1, net.parameters(), retain_graph=True, allow_unused=True)
-        grads2 = torch.autograd.grad(loss2, net.parameters(), retain_graph=True, allow_unused=True)
-        grads3 = torch.autograd.grad(loss3, net.parameters(), create_graph=True, allow_unused=True)
+            grads1 = torch.autograd.grad(loss1, net.parameters(), retain_graph=True, allow_unused=True)
+            grads2 = torch.autograd.grad(loss2, net.parameters(), retain_graph=True, allow_unused=True)
+            grads3 = torch.autograd.grad(loss3, net.parameters(), create_graph=True, allow_unused=True)
 
-        fast_weights = OrderedDict((name, param - res_lr * ((grad1 if (grad1 is not None) else 0)+(grad2 if (grad2 is not None) else 0)+(grad3 if (grad3 is not None) else 0))) for ((name, param), grad1, grad2, grad3) in zip(fast_weights.items(), grads1, grads2, grads3))
-        output = net(inputs, fast_weights)
-        loss = criterion(output, targets)
-        loss.backward()
+            fast_weights = OrderedDict((name, param - res_lr * ((grad1 if (grad1 is not None) else 0)+(grad2 if (grad2 is not None) else 0)+(grad3 if (grad3 is not None) else 0))) for ((name, param), grad1, grad2, grad3) in zip(fast_weights.items(), grads1, grads2, grads3))
+            output = net(inputs, fast_weights)
+            loss = criterion(output, targets)
+            loss.backward()
 
-        meta_optimizer.step()
+            meta_optimizer.step()
 
-        train_loss += loss.item()
-        _, predicted = output.max(1)
-        total += targets.size(0)
-        correct += predicted.eq(targets).sum().item()
+            train_loss += loss.item()
+            _, predicted = output.max(1)
+            total += targets.size(0)
+            correct += predicted.eq(targets).sum().item()
 
-        progress_bar(batch_idx, len(trainloader), 'Loss: %.3f | Acc: %.3f%% (%d/%d) | lr: %.3f'
-            % (train_loss/(batch_idx+1), 100.*correct/total, correct, total, lr))
-    """
+            progress_bar(batch_idx, len(trainloader), 'Loss: %.3f | Acc: %.3f%% (%d/%d) | lr: %.3f'
+                % (train_loss/(batch_idx+1), 100.*correct/total, correct, total, lr))
+    
 
 def test(epoch):
     global best_acc
