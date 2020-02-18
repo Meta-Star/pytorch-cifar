@@ -63,6 +63,19 @@ class Bottleneck(nn.Module):
         out = F.relu(out)
         return out
 
+def ScalaNet(channel_in, channel_out, size):
+    return nn.Sequential(
+        nn.Conv2d(channel_in, 128, kernel_size=1, stride=1),
+        nn.BatchNorm2d(128),
+        nn.ReLU(),
+        nn.Conv2d(128, 128, kernel_size=size, stride=size),
+        nn.BatchNorm2d(128),
+        nn.ReLU(),
+        nn.Conv2d(128, channel_out, kernel_size=1, stride=1),
+        nn.BatchNorm2d(channel_out),
+        nn.ReLU(),
+        nn.AvgPool2d(4, 4)
+        )
 
 class ResNet(nn.Module):
     def __init__(self, block, num_blocks, num_classes=100):
@@ -75,6 +88,15 @@ class ResNet(nn.Module):
         self.layer2 = self._make_layer(block, 128, num_blocks[1], stride=2)
         self.layer3 = self._make_layer(block, 256, num_blocks[2], stride=2)
         self.layer4 = self._make_layer(block, 512, num_blocks[3], stride=2)
+
+        self.bottleneck_1 = ScalaNet(64*block.expansion, 512*block.expansion, 8)
+        self.bottleneck_2 = ScalaNet(128*block.expansion, 512*block.expansion, 4)
+        self.bottleneck_3 = ScalaNet(256*block.expansion, 512*block.expansion, 2)
+
+        self.fc1 = nn.Linear(512 * block.expansion, num_classes)
+        self.fc2 = nn.Linear(512 * block.expansion, num_classes)
+        self.fc3 = nn.Linear(512 * block.expansion, num_classes)
+
         self.linear = nn.Linear(512*block.expansion, num_classes)
 
     def _make_layer(self, block, planes, num_blocks, stride):
@@ -85,15 +107,82 @@ class ResNet(nn.Module):
             self.in_planes = planes * block.expansion
         return nn.Sequential(*layers)
 
-    def forward(self, x):
+    def forward(self, x, train=True, baseline=False):
+
+        if not train:
+            return self.predict(x)
+        if baseline:
+            self.forward_bs(x, train=train)
+
         out = F.relu(self.bn1(self.conv1(x)))
-        out = self.layer1(out)
-        out = self.layer2(out)
-        out = self.layer3(out)
-        out = self.layer4(out)
-        out = F.avg_pool2d(out, 4)
-        out = out.view(out.size(0), -1)
+
+        outfeat1 = self.layer1(out)
+        feat1 = self.bottleneck_1(outfeat1).view(out.size(0), -1)
+        out1 = self.fc1(feat1)
+
+        outfeat2 = self.layer2(outfeat1)
+        feat2 = self.bottleneck_2(outfeat2).view(out.size(0), -1)
+        out2 = self.fc2(feat2)
+
+        outfeat3 = self.layer3(outfeat2)
+        feat3 = self.bottleneck_3(outfeat3).view(out.size(0), -1)
+        out3 = self.fc3(feat3)
+
+        outfeat4 = self.layer4(outfeat3)
+        out = F.avg_pool2d(outfeat4, 4).view(out.size(0), -1)
         out = self.linear(out)
+
+        return [out1, out2, out3, out], [outfeat4, outfeat3, outfeat2, outfeat1]
+
+    def forward_bs(self, x, train=True):
+
+        if not train:
+            return self.predict(x)
+
+        out = F.relu(self.bn1(self.conv1(x)))
+
+        out = self.layer1(out)
+        feat1 = self.bottleneck_1(out).view(out.size(0), -1)
+        out1 = self.fc1(feat1)
+
+        out = self.layer2(out)
+        feat2 = self.bottleneck_2(out).view(out.size(0), -1)
+        out2 = self.fc2(feat2)
+
+        out = self.layer3(out)
+        feat3 = self.bottleneck_3(out).view(out.size(0), -1)
+        out3 = self.fc3(feat3)
+
+        out = self.layer4(out)
+        out = F.avg_pool2d(out, 4).view(out.size(0), -1)
+
+        feat_teacher = out.detach()
+        feat_teacher.requires_grad = False
+        feat_loss = ((feat_teacher - feat1) ** 2 + (feat_teacher - feat2) ** 2 + (feat_teacher - feat3) ** 2).sum()
+
+
+        out = self.linear(out)
+
+
+
+        return [out1, out2, out3, out], feat_loss
+
+    def predict(self, x):
+        out = F.relu(self.bn1(self.conv1(x)))
+
+        out = self.layer1(out)
+
+
+        out = self.layer2(out)
+
+
+        out = self.layer3(out)
+
+
+        out = self.layer4(out)
+        out = F.avg_pool2d(out, 4).view(out.size(0), -1)
+        out = self.linear(out)
+
         return out
 
 
