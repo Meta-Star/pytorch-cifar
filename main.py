@@ -36,6 +36,8 @@ device = 'cuda' if torch.cuda.is_available() else 'cpu'
 best_acc = 0  # best test accuracy
 start_epoch = 0  # start from epoch 0 or last checkpoint epoch
 
+print(torch.initial_seed())
+
 # Data
 print('==> Preparing data..')
 transform_train = transforms.Compose([
@@ -221,24 +223,39 @@ def test(epoch):
     global best_acc
     net.eval()
     test_loss = 0
-    correct = 0
+    correct1 = 0
+    correct2 = 0
+    correct3 = 0
+    correct4 = 0
+    correct5 = 0
     total = 0
     with torch.no_grad():
         for batch_idx, (inputs, targets) in enumerate(testloader):
             inputs, targets = inputs.to(device), targets.to(device)
-            outputs = net(inputs, train=False)
-            loss = criterion(outputs, targets)
-
+            #outputs = net(inputs, train=False)
+            outputs, _ = net(inputs)
+            loss = criterion(outputs[-1], targets)
             test_loss += loss.item()
-            _, predicted = outputs.max(1)
-            total += targets.size(0)
-            correct += predicted.eq(targets).sum().item()
 
-            progress_bar(batch_idx, len(testloader), 'Loss: %.3f | Acc: %.3f%% (%d/%d)'
-                % (test_loss/(batch_idx+1), 100.*correct/total, correct, total))
+            ensemble = sum(outputs) / len(outputs)
+            _, predicted1 = outputs[0].max(1)
+            _, predicted2 = outputs[1].max(1)
+            _, predicted3 = outputs[2].max(1)
+            _, predicted4 = outputs[3].max(1)
+            _, predicted5 = ensemble.max(1)
+
+            total += targets.size(0)
+            correct1 += predicted1.eq(targets).sum().item()
+            correct2 += predicted2.eq(targets).sum().item()
+            correct3 += predicted3.eq(targets).sum().item()
+            correct4 += predicted4.eq(targets).sum().item()
+            correct5 += predicted5.eq(targets).sum().item()
+
+            progress_bar(batch_idx, len(testloader), 'Loss: %.3f | Acc(1/2/3/4/e): %.3f%% / %.3f%% / %.3f%% / %.3f%% / %.3f%%'
+                % (test_loss/(batch_idx+1), 100.*correct1/total, 100.*correct2/total, 100.*correct3/total, 100.*correct4/total, 100.*correct5/total))
 
     # Save checkpoint.
-    acc = 100.*correct/total
+    acc = 100.*correct5/total
     if acc > best_acc:
         print('Saving..')
         state = {
