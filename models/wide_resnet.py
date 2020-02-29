@@ -1,11 +1,3 @@
-'''ResNet in PyTorch.
-
-For Pre-activation ResNet, see 'preact_resnet.py'.
-
-Reference:
-[1] Kaiming He, Xiangyu Zhang, Shaoqing Ren, Jian Sun
-    Deep Residual Learning for Image Recognition. arXiv:1512.03385
-'''
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -123,16 +115,16 @@ def Bottleneck_functional_forward(x, weights, stride):
 
 def ScalaNet(channel_in, channel_out, size):
     return nn.Sequential(
-        nn.Conv2d(channel_in, 128, kernel_size=1, stride=1),
-        nn.BatchNorm2d(128),
+        nn.Conv2d(channel_in, 16, kernel_size=1, stride=1),
+        nn.BatchNorm2d(16),
         nn.ReLU(),
-        nn.Conv2d(128, 128, kernel_size=size, stride=size),
-        nn.BatchNorm2d(128),
+        nn.Conv2d(16, 16, kernel_size=size, stride=size),
+        nn.BatchNorm2d(16),
         nn.ReLU(),
-        nn.Conv2d(128, channel_out, kernel_size=1, stride=1),
+        nn.Conv2d(16, channel_out, kernel_size=1, stride=1),
         nn.BatchNorm2d(channel_out),
         nn.ReLU(),
-        nn.AvgPool2d(4, 4)
+        nn.AvgPool2d(8, 8)
         )
 
 
@@ -160,29 +152,27 @@ def ScalaNet_functional_forward(x, weights, stride):
 
     return out
 
-class ResNet(nn.Module):
-    def __init__(self, block, num_blocks, num_classes=100):
-        super(ResNet, self).__init__()
-        self.in_planes = 64
+class wideResNet(nn.Module):
+    def __init__(self, block, num_blocks, k=1, num_classes=100):
+        super(wideResNet, self).__init__()
+        self.in_planes = 16
         self.num_blocks = num_blocks
-        self.block = block
 
-        self.conv1 = nn.Conv2d(3, 64, kernel_size=3, stride=1, padding=1, bias=False)
-        self.bn1 = nn.BatchNorm2d(64)
-        self.layer1 = self._make_layer(block, 64, num_blocks[0], stride=1)
-        self.layer2 = self._make_layer(block, 128, num_blocks[1], stride=2)
-        self.layer3 = self._make_layer(block, 256, num_blocks[2], stride=2)
-        self.layer4 = self._make_layer(block, 512, num_blocks[3], stride=2)
+        self.conv1 = nn.Conv2d(3, 16, kernel_size=3, stride=1, padding=1, bias=False)
+        self.bn1 = nn.BatchNorm2d(16)
+        self.layer1 = self._make_layer(block, 16*k, num_blocks[0], stride=1)
+        self.layer2 = self._make_layer(block, 32*k, num_blocks[1], stride=2)
+        self.layer3 = self._make_layer(block, 64*k, num_blocks[2], stride=2)
 
-        self.bottleneck_1 = ScalaNet(64*block.expansion, 512*block.expansion, 8)
-        self.bottleneck_2 = ScalaNet(128*block.expansion, 512*block.expansion, 4)
-        self.bottleneck_3 = ScalaNet(256*block.expansion, 512*block.expansion, 2)
 
-        self.fc1 = nn.Linear(512 * block.expansion, num_classes)
-        self.fc2 = nn.Linear(512 * block.expansion, num_classes)
-        self.fc3 = nn.Linear(512 * block.expansion, num_classes)
+        self.bottleneck_1 = ScalaNet(16*k*block.expansion, 64*k*block.expansion, 4)
+        self.bottleneck_2 = ScalaNet(32*k*block.expansion, 64*k*block.expansion, 2)
 
-        self.linear = nn.Linear(512*block.expansion, num_classes)
+
+        self.fc1 = nn.Linear(64*k*block.expansion, num_classes)
+        self.fc2 = nn.Linear(64*k*block.expansion, num_classes)
+
+        self.linear = nn.Linear(64*k*block.expansion, num_classes)
 
     def _make_layer(self, block, planes, num_blocks, stride):
         strides = [stride] + [1]*(num_blocks-1)
@@ -192,8 +182,7 @@ class ResNet(nn.Module):
             self.in_planes = planes * block.expansion
         return nn.Sequential(*layers)
 
-    def forward(self, x, weights=None, train=True, baseline=False):
-
+    def forward(self, x, weights=None, train=False, baseline=False):
         if not train:
             return self.predict(x)
 
@@ -213,14 +202,10 @@ class ResNet(nn.Module):
         out2 = self.fc2(feat2)
 
         outfeat3 = self.layer3(outfeat2)
-        feat3 = self.bottleneck_3(outfeat3).view(out.size(0), -1)
-        out3 = self.fc3(feat3)
-
-        outfeat4 = self.layer4(outfeat3)
-        out = F.avg_pool2d(outfeat4, 4).view(out.size(0), -1)
+        out = F.avg_pool2d(outfeat3, 8).view(out.size(0), -1)
         out = self.linear(out)
 
-        return [out1, out2, out3, out], [outfeat4, outfeat3, outfeat2, outfeat1]
+        return [out1, out2, out], [outfeat3, outfeat2, outfeat1]
 
     def forward_weights(self, x, weights):
         out = F.conv2d(x, weights['module.conv1.weight'], stride=1, padding=1)
@@ -232,55 +217,26 @@ class ResNet(nn.Module):
         for stage_num in range(1, len(self.num_blocks)+1):
             for block_num in range(self.num_blocks[stage_num-1]):
                 if block_num == 0 and stage_num != 1:
-                    if self.block = BasicBlock:
-                        out = BasicBlock_functional_forward(out, 
-                            weights=[weights['module.layer{:d}.0.conv1.weight'.format(stage_num)], 
-                            weights['module.layer{:d}.0.bn1.weight'.format(stage_num)],
-                            weights['module.layer{:d}.0.bn1.bias'.format(stage_num)],
-                            weights['module.layer{:d}.0.conv2.weight'.format(stage_num)], 
-                            weights['module.layer{:d}.0.bn2.weight'.format(stage_num)],
-                            weights['module.layer{:d}.0.bn2.bias'.format(stage_num)],
-                            weights['module.layer{:d}.0.conv3.weight'.format(stage_num)], 
-                            weights['module.layer{:d}.0.bn3.weight'.format(stage_num)],
-                            weights['module.layer{:d}.0.bn3.bias'.format(stage_num)],
-                            weights['module.layer{:d}.0.shortcut.0.weight'.format(stage_num)], 
-                            weights['module.layer{:d}.0.shortcut.1.weight'.format(stage_num)],
-                            weights['module.layer{:d}.0.shortcut.1.bias'.format(stage_num)]], stride=2
-                            )
-                    else:
-                        out = Bottleneck_functional_forward(out, 
-                            weights=[weights['module.layer{:d}.0.conv1.weight'.format(stage_num)], 
-                            weights['module.layer{:d}.0.bn1.weight'.format(stage_num)],
-                            weights['module.layer{:d}.0.bn1.bias'.format(stage_num)],
-                            weights['module.layer{:d}.0.conv2.weight'.format(stage_num)], 
-                            weights['module.layer{:d}.0.bn2.weight'.format(stage_num)],
-                            weights['module.layer{:d}.0.bn2.bias'.format(stage_num)],
-                            weights['module.layer{:d}.0.shortcut.0.weight'.format(stage_num)], 
-                            weights['module.layer{:d}.0.shortcut.1.weight'.format(stage_num)],
-                            weights['module.layer{:d}.0.shortcut.1.bias'.format(stage_num)]], stride=2
-                            )
+                    out = BasicBlock_functional_forward(out, 
+                        weights=[weights['module.layer{:d}.0.conv1.weight'.format(stage_num)], 
+                        weights['module.layer{:d}.0.bn1.weight'.format(stage_num)],
+                        weights['module.layer{:d}.0.bn1.bias'.format(stage_num)],
+                        weights['module.layer{:d}.0.conv2.weight'.format(stage_num)], 
+                        weights['module.layer{:d}.0.bn2.weight'.format(stage_num)],
+                        weights['module.layer{:d}.0.bn2.bias'.format(stage_num)],
+                        weights['module.layer{:d}.0.shortcut.0.weight'.format(stage_num)], 
+                        weights['module.layer{:d}.0.shortcut.1.weight'.format(stage_num)],
+                        weights['module.layer{:d}.0.shortcut.1.bias'.format(stage_num)]], stride=2
+                        )
                 else:
-                    if self.block = BasicBlock:
-                        out = BasicBlock_functional_forward(out,
-                            weights=[weights['module.layer{:d}.{:d}.conv1.weight'.format(stage_num, block_num)], 
-                            weights['module.layer{:d}.{:d}.bn1.weight'.format(stage_num, block_num)],
-                            weights['module.layer{:d}.{:d}.bn1.bias'.format(stage_num, block_num)],
-                            weights['module.layer{:d}.{:d}.conv2.weight'.format(stage_num, block_num)], 
-                            weights['module.layer{:d}.{:d}.bn2.weight'.format(stage_num, block_num)],
-                            weights['module.layer{:d}.{:d}.bn2.bias'.format(stage_num, block_num)]], stride=1
-                            )
-                    else:
-                        out = Bottleneck_functional_forward(out,
-                            weights=[weights['module.layer{:d}.{:d}.conv1.weight'.format(stage_num, block_num)], 
-                            weights['module.layer{:d}.{:d}.bn1.weight'.format(stage_num, block_num)],
-                            weights['module.layer{:d}.{:d}.bn1.bias'.format(stage_num, block_num)],
-                            weights['module.layer{:d}.{:d}.conv2.weight'.format(stage_num, block_num)], 
-                            weights['module.layer{:d}.{:d}.bn2.weight'.format(stage_num, block_num)],
-                            weights['module.layer{:d}.{:d}.bn2.bias'.format(stage_num, block_num)],
-                            weights['module.layer{:d}.{:d}.conv3.weight'.format(stage_num, block_num)], 
-                            weights['module.layer{:d}.{:d}.bn3.weight'.format(stage_num, block_num)],
-                            weights['module.layer{:d}.{:d}.bn3.bias'.format(stage_num, block_num)]], stride=1
-                            )
+                    out = BasicBlock_functional_forward(out,
+                        weights=[weights['module.layer{:d}.{:d}.conv1.weight'.format(stage_num, block_num)], 
+                        weights['module.layer{:d}.{:d}.bn1.weight'.format(stage_num, block_num)],
+                        weights['module.layer{:d}.{:d}.bn1.bias'.format(stage_num, block_num)],
+                        weights['module.layer{:d}.{:d}.conv2.weight'.format(stage_num, block_num)], 
+                        weights['module.layer{:d}.{:d}.bn2.weight'.format(stage_num, block_num)],
+                        weights['module.layer{:d}.{:d}.bn2.bias'.format(stage_num, block_num)]], stride=1
+                        )
 
         out = F.avg_pool2d(out, 4)
         out = out.view(out.size(0), -1)
@@ -332,29 +288,14 @@ class ResNet(nn.Module):
 
         out = self.layer3(out)
 
-
-        out = self.layer4(out)
-
-        out = F.avg_pool2d(out, 4).view(out.size(0), -1)
+        out = F.avg_pool2d(out, 8).view(out.size(0), -1)
         out = self.linear(out)
 
         return out
 
 
-def ResNet18():
-    return ResNet(BasicBlock, [2,2,2,2])
-
-def ResNet34():
-    return ResNet(BasicBlock, [3,4,6,3])
-
-def ResNet50():
-    return ResNet(Bottleneck, [3,4,6,3])
-
-def ResNet101():
-    return ResNet(Bottleneck, [3,4,23,3])
-
-def ResNet152():
-    return ResNet(Bottleneck, [3,8,36,3])
+def wideResNet_16_k(k=1):
+    return wideResNet(BasicBlock, [2,2,2], k=k, num_classes=100)
 
 
 def test():

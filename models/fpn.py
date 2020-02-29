@@ -20,22 +20,22 @@ class FPN(nn.Module):
     def __init__(self, block, num_classes):
         super(FPN, self).__init__()
         self.expansion = block.expansion
-        self.conv4 = nn.Conv2d(512*self.expansion, 64*self.expansion, kernel_size=1, stride=1, padding=0)
-        self.conv3 = nn.Conv2d(256*self.expansion, 64*self.expansion, kernel_size=1, stride=1, padding=0)
-        self.conv2 = nn.Conv2d(128*self.expansion, 64*self.expansion, kernel_size=1, stride=1, padding=0)
-        self.conv1 = nn.Conv2d(64*self.expansion, 64*self.expansion, kernel_size=1, stride=1, padding=0)
+        self.conv4 = nn.Conv2d(512*self.expansion, 64, kernel_size=1, stride=1, padding=0)
+        self.conv3 = nn.Conv2d(256*self.expansion, 64, kernel_size=1, stride=1, padding=0)
+        self.conv2 = nn.Conv2d(128*self.expansion, 64, kernel_size=1, stride=1, padding=0)
+        self.conv1 = nn.Conv2d(64*self.expansion, 64, kernel_size=1, stride=1, padding=0)
 
-        self.smooth3 = nn.Conv2d(64*self.expansion, 64*self.expansion, kernel_size=3, stride=1, padding=1)
-        self.smooth2 = nn.Conv2d(64*self.expansion, 64*self.expansion, kernel_size=3, stride=1, padding=1)
-        self.smooth1 = nn.Conv2d(64*self.expansion, 64*self.expansion, kernel_size=3, stride=1, padding=1)
+        self.smooth3 = nn.Conv2d(64, 64, kernel_size=3, stride=1, padding=1)
+        self.smooth2 = nn.Conv2d(64, 64, kernel_size=3, stride=1, padding=1)
+        self.smooth1 = nn.Conv2d(64, 64, kernel_size=3, stride=1, padding=1)
 
-        self.bottleneck3 = ScalaNet(64*self.expansion, 512*self.expansion, 2)
-        self.bottleneck2 = ScalaNet(64*block.expansion, 512*block.expansion, 4)
-        self.bottleneck1 = ScalaNet(64*block.expansion, 512*block.expansion, 8)
+        self.bottleneck3 = ScalaNet(64, 512, 2)
+        self.bottleneck2 = ScalaNet(64, 512, 4)
+        self.bottleneck1 = ScalaNet(64, 512, 8)
 
-        self.fc3 = nn.Linear(512 * block.expansion, num_classes)
-        self.fc2 = nn.Linear(512 * block.expansion, num_classes)
-        self.fc1 = nn.Linear(512 * block.expansion, num_classes)
+        self.fc3 = nn.Linear(512, num_classes)
+        self.fc2 = nn.Linear(512, num_classes)
+        self.fc1 = nn.Linear(512, num_classes)
 
     def forward(self, feature_map4, feature_map3, feature_map2, feature_map1):
         p4 = self.conv4(feature_map4)

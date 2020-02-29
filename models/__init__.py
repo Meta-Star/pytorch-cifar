@@ -14,3 +14,4 @@ from .mobilenet import *
 from .mobilenetv2 import *
 from .efficientnet import *
 from .fpn import *
+from .wide_resnet import *
