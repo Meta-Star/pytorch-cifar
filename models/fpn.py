@@ -42,17 +42,17 @@ class FPN(nn.Module):
 
         p3 = F.interpolate(p4, size=(feature_map3.size(2), feature_map3.size(3)), mode='bilinear') + self.conv3(feature_map3)
         p3 = self.smooth3(p3)
-        feat3 = self.bottleneck3(p3).view(-1, 512*self.expansion)
+        feat3 = self.bottleneck3(p3).view(-1, 512)
         label3 = self.fc3(feat3)
 
         p2 = F.interpolate(p3, size=(feature_map2.size(2), feature_map2.size(3)), mode='bilinear') + self.conv2(feature_map2)
         p2 = self.smooth2(p2)
-        feat2 = self.bottleneck2(p2).view(-1, 512*self.expansion)
+        feat2 = self.bottleneck2(p2).view(-1, 512)
         label2 = self.fc2(feat2)
 
         p1 = F.interpolate(p2, size=(feature_map1.size(2), feature_map1.size(3)), mode='bilinear') + self.conv1(feature_map1)
         p1 = self.smooth1(p1)
-        feat1 = self.bottleneck1(p1).view(-1, 512*self.expansion)
+        feat1 = self.bottleneck1(p1).view(-1, 512)
         label1 = self.fc1(feat1)
         
         return [label1, label2, label3]

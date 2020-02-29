@@ -61,8 +61,10 @@ classes = ('plane', 'car', 'bird', 'cat', 'deer', 'dog', 'frog', 'horse', 'ship'
 # Model
 print('==> Building model..')
 # net = VGG('VGG19')
-net = ResNet18()
-labelGenerator = FPN(BasicBlock, 100)
+net = ResNet50()
+for (name, param) in net.named_parameters():
+    print(name)
+labelGenerator = FPN(Bottleneck, 100)
 # net = PreActResNet18()
 # net = GoogLeNet()
 # net = DenseNet121()
