@@ -97,7 +97,7 @@ def Bottleneck_functional_forward(x, weights, stride):
                                training=True)
     out = F.relu(out, inplace=True)
         
-    out = F.conv2d(x, weights[3], stride=stride, padding=1)
+    out = F.conv2d(out, weights[3], stride=stride, padding=1)
     out = F.batch_norm(out, torch.zeros(out.data.size(1)).cuda(), torch.ones(out.data.size(1)).cuda(),
                                weight=weights[4], bias=weights[5],
                                training=True)
@@ -254,7 +254,8 @@ class ResNet(nn.Module):
                             weights['module.layer{:d}.{:d}.bn2.bias'.format(stage_num, block_num)]], stride=1
                             )
                 else:
-                    if block_num == 0:        
+                    if block_num == 0:
+                        s = 1 if (stage_num == 1) else 2         
                         out = Bottleneck_functional_forward(out, 
                             weights=[weights['module.layer{:d}.0.conv1.weight'.format(stage_num)], 
                             weights['module.layer{:d}.0.bn1.weight'.format(stage_num)],
@@ -267,7 +268,7 @@ class ResNet(nn.Module):
                             weights['module.layer{:d}.0.bn3.bias'.format(stage_num)],
                             weights['module.layer{:d}.0.shortcut.0.weight'.format(stage_num)], 
                             weights['module.layer{:d}.0.shortcut.1.weight'.format(stage_num)],
-                            weights['module.layer{:d}.0.shortcut.1.bias'.format(stage_num)]], stride=2
+                            weights['module.layer{:d}.0.shortcut.1.bias'.format(stage_num)]], stride=s
                             )
                     else:
                         out = Bottleneck_functional_forward(out,

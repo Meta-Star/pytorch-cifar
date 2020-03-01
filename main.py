@@ -61,10 +61,8 @@ classes = ('plane', 'car', 'bird', 'cat', 'deer', 'dog', 'frog', 'horse', 'ship'
 # Model
 print('==> Building model..')
 # net = VGG('VGG19')
-net = ResNet50()
-for (name, param) in net.named_parameters():
-    print(name)
-labelGenerator = FPN(Bottleneck, 100)
+net = ResNet18()
+labelGenerator = FPN(BasicBlock, 100)
 # net = PreActResNet18()
 # net = GoogLeNet()
 # net = DenseNet121()
@@ -115,7 +113,7 @@ def train(epoch):
     train_loss = 0
     correct = 0
     total = 0
-
+    
     for batch_idx, (inputs, targets) in enumerate(trainloader):
         inputs, targets = inputs.to(device), targets.to(device)
         outputs, outfeat = net(inputs)
@@ -136,7 +134,7 @@ def train(epoch):
             teacher_label = label[index].detach()
             teacher_labels.append(teacher_label)
         
-        
+    
         """
         #baseline
         teacher_label = outputs[-1].detach()
@@ -151,6 +149,7 @@ def train(epoch):
             teacher_label.requires_grad = False
             teacher_labels.append(teacher_label)
         """
+
         for index in range(0, len(outputs)-1):
             loss += criterion(outputs[index], targets) * (1 - args.lambda_KD)
             loss += CrossEntropy(outputs[index], teacher_labels[index]) * args.lambda_KD * 1.0
@@ -168,7 +167,7 @@ def train(epoch):
 
         progress_bar(batch_idx, len(trainloader), 'Loss: %.3f | Acc: %.3f%% (%d/%d) | lr: %.3f'
             % (train_loss/(batch_idx+1), 100.*correct/total, correct, total, lr))
-
+    
     
     #meta_update
     if epoch%5 == 0:
@@ -178,18 +177,14 @@ def train(epoch):
         for batch_idx, (inputs, targets) in enumerate(trainloader):
             inputs, targets = inputs.to(device), targets.to(device)
             outputs, outfeat = net(inputs)
-            meta_optimizer.zero_grad()
+            #meta_optimizer.zero_grad()
             
             outfeat4 = outfeat[0].detach()
             outfeat3 = outfeat[1].detach()
             outfeat2 = outfeat[2].detach()
             outfeat1 = outfeat[3].detach()
-            label = labelGenerator(outfeat4, outfeat3, outfeat2, outfeat1)
-            teacher_labels = []
-            for index in range(len(label)):
-                teacher_label = label[index].detach()
-                teacher_labels.append(teacher_label)       
-
+            teacher_labels = labelGenerator(outfeat4, outfeat3, outfeat2, outfeat1)
+   
             loss1 = criterion(outputs[-1], targets)
             loss2 = torch.tensor(0.0).to(device)
             loss3 = torch.tensor(0.0).to(device)
@@ -199,16 +194,31 @@ def train(epoch):
 
             fast_weights = OrderedDict((name, param) for (name, param) in net.named_parameters())
 
-            grads1 = torch.autograd.grad(loss1, net.parameters(), retain_graph=True, allow_unused=True)
             grads2 = torch.autograd.grad(loss2, net.parameters(), retain_graph=True, allow_unused=True)
             grads3 = torch.autograd.grad(loss3, net.parameters(), create_graph=True, allow_unused=True)
+            grads1 = torch.autograd.grad(loss1, net.parameters(), allow_unused=True)
+
+            #grads_meta = torch.autograd.grad(loss3, labelGenerator.parameters(), retain_graph=True, allow_unused=True)
+
+            #for (param, grad1, grad2, grad3) in zip(net.parameters(), grads1, grads2, grads3):
+            #    param -= res_lr * ((grad1 if (grad1 is not None) else 0)+(grad2 if (grad2 is not None) else 0)+(grad3 if (grad3 is not None) else 0))
 
             fast_weights = OrderedDict((name, param - res_lr * ((grad1 if (grad1 is not None) else 0)+(grad2 if (grad2 is not None) else 0)+(grad3 if (grad3 is not None) else 0))) for ((name, param), grad1, grad2, grad3) in zip(fast_weights.items(), grads1, grads2, grads3))
             output = net(inputs, fast_weights)
+            #output = net(inputs, train=False)
             loss = criterion(output, targets)
-            loss.backward()
+            #loss.backward()
+
+            grad = torch.autograd.grad(loss, labelGenerator.parameters(), allow_unused=True)
+            with torch.no_grad():
+                for alpha, g in zip(labelGenerator.parameters(), grad):
+                    alpha.grad = g * 100
 
             meta_optimizer.step()
+
+            #with torch.no_grad():
+                #for (param, grad1, grad2, grad3) in zip(net.parameters(), grads1, grads2, grads3):
+                    #param += res_lr * ((grad1 if (grad1 is not None) else 0)+(grad2 if (grad2 is not None) else 0)+(grad3 if (grad3 is not None) else 0))
 
             train_loss += loss.item()
             _, predicted = output.max(1)
